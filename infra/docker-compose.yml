@@ -1,0 +1,44 @@
+services:
+
+  db:
+    container_name: db
+    image: postgres:16.2-alpine
+    restart: always
+    volumes:
+      - db_volume_chat:/var/lib/postgresql/data/
+    ports:
+      - '5432:5432'
+    env_file:
+      - ./.env
+
+  backend:
+    container_name: backend
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+    volumes:
+      - backend_static:/app/static/
+      - backend_templates:/app/templates/
+
+  nginx:
+    container_name: proxy
+    image: nginx:1.19.3
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - backend_static:/static/
+      - backend_templates:/templates/
+
+volumes:
+  db_volume_chat:
+  backend_static:
+  backend_templates:
