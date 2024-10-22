@@ -13,7 +13,7 @@ from fastapi import (
     Form,
     Request
 )
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -46,11 +46,54 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+@app.get('/')
+async def redirect_to_auth():
+    """Редирект на страницу /auth."""
+    return RedirectResponse(url='/auth_or_register')
+
+
+@app.get('/auth_or_register', response_class=HTMLResponse)
+async def auth_or_register(request: Request):
+    return templates.TemplateResponse(
+        request, 'auth_or_register.html'
+    )
+
+
+@app.get('/register', response_class=HTMLResponse)
+async def register_page(request: Request):
+    return templates.TemplateResponse(
+        request, 'register.html'
+    )
+
+
+@app.post('/register', response_class=HTMLResponse)
+async def register(
+    request: Request,
+    email: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    repeat_password: Annotated[str, Form()]
+):
+    print(email, password, repeat_password)
+    return templates.TemplateResponse(
+        request, 'auth.html'
+    )
+
+
 @app.get('/auth', response_class=HTMLResponse)
-async def auth_cookie(request: Request):
+async def auth_page(request: Request):
+    return templates.TemplateResponse(
+        request, 'auth.html'
+    )
+
+
+@app.post('/auth', response_class=HTMLResponse)
+async def auth_cookie(request: Request,
+                      email: Annotated[str, Form()],
+                      password: Annotated[str, Form()]):
+    print(email, password)
     return templates.TemplateResponse(
         request,
-        'auth.html'
+        'chat.html'
     )
 
 

@@ -1,17 +1,16 @@
-
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>Chat</title>
-    </head>
-    <body>
-        <h1>WebSocket Chat</h1>
-        {{ user }}
-        <h2>Your ID: <span id="ws-id"></span></h2>
-        <form action="coockie" method="post">
-            <label>Message</label>
-            <input type="text" name="member" autocomplete="off"/>
-            <input type="submit">
-        </form>
-    </body>
+<head>
+    <title>Auth</title>
+</head>
+<body>
+
+<h2>Авторизация</h2>
+<form action="auth" method="post">
+    <label>Электропочта: <input type="email" name="email" autocomplete="off"/></label>
+    <label>Пароль: <input type="password" name="password" autocomplete="off"/></label>
+    <input type="submit">
+    
+</form>
+</body>
 </html>
