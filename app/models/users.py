@@ -6,9 +6,5 @@ from app.core.db import Base
 
 
 class User(Base):
-    name: Mapped[str] = mapped_column(
-        String(length=settings.max_length_string),
-        nullable=False
-    )
     password: Mapped[str] = mapped_column(String, nullable=False)
     email: Mapped[str] = mapped_column(String, nullable=False)

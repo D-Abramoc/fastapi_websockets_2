@@ -16,8 +16,21 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.endpoints import router_users
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
+app.include_router(router_users)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -65,18 +78,6 @@ async def register_page(request: Request):
         request, 'register.html'
     )
 
-
-@app.post('/register', response_class=HTMLResponse)
-async def register(
-    request: Request,
-    email: Annotated[str, Form()],
-    password: Annotated[str, Form()],
-    repeat_password: Annotated[str, Form()]
-):
-    print(email, password, repeat_password)
-    return templates.TemplateResponse(
-        request, 'auth.html'
-    )
 
 
 @app.get('/auth', response_class=HTMLResponse)

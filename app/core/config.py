@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     description: str = 'Chat'
     database_url: str = 'sqlite+aiosqlite:///./fastapi.db'
     secret: str = 'SECRET'
+    algorithm: str = ''
 
     min_password_length: int = 3
     max_length_string: int = 100
@@ -19,3 +20,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_auth_data():
+    return {
+        'secret_key': settings.secret,
+        'algorithm': settings.algorithm
+    }
