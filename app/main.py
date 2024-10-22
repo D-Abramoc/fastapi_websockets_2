@@ -36,6 +36,57 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
 
+html = """
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Chat</title>
+    </head>
+    <body>
+        <h1>WebSocket Chat</h1>
+
+        <hr>
+
+        <hr>
+        <form action="" onsubmit="sendMessage(event)">
+            <label>Item ID: <input type="text" id="itemId" autocomplete="off" value="foo"/></label>
+            <label>Token: <input type="text" id="token" autocomplete="off" value""/></label>
+            <button onclick="connect(event)">Connect</button>
+            <hr>
+            <label>Message: <input type="text" id="messageText" autocomplete="off"/></label>
+            <button>Send</button>
+        </form>
+        <ul id='messages'>
+        </ul>
+        <script>
+        var ws = null;
+            function connect(event) {
+                var itemId = document.getElementById("itemId")
+                var token = document.getElementById("token")
+                ws = new WebSocket("ws://localhost:8000/items/" + itemId.value + "/ws?token=" + token.value);
+                ws.onopen = () => console.log('Websocket connected')
+                ws.onmessage = function(event) {
+                    var messages = document.getElementById('messages')
+                    var message = document.createElement('li')
+                    var content = document.createTextNode(event.data)
+                    message.appendChild(content)
+                    messages.appendChild(message)
+                };
+                ws.onclose = () => console.log('Websocket disconnected')
+                event.preventDefault()
+            }
+            function sendMessage(event) {
+                var input = document.getElementById("messageText")
+                ws.send(input.value)
+                input.value = ''
+                event.preventDefault()
+            }
+        </script>
+    </body>
+</html>
+
+"""
+
 
 class ConnectionManager:
     def __init__(self):
@@ -87,55 +138,53 @@ async def auth_page(request: Request):
     )
 
 
-@app.post('/auth', response_class=HTMLResponse)
-async def auth_cookie(request: Request,
-                      email: Annotated[str, Form()],
-                      password: Annotated[str, Form()]):
-    print(email, password)
-    return templates.TemplateResponse(
-        request,
-        'chat.html'
-    )
 
 
 @app.post('/coockie')
 async def create_coockie(response: Response, member=Form()):
-    response.set_cookie(key='fakecoockie', value=member, domain='.localhost')
+    response.set_cookie(key='user_access_token', value=member)
     return {'result': 'ok'}
 
 
 @app.get('/checkcookie', response_class=HTMLResponse)
-async def check(request: Request, fakecoockie=Cookie()):
+async def check(request: Request, user_access_token: str | None = Cookie(default=None)):
     return templates.TemplateResponse(
         request,
         'checkcookie.html',
-        {'coockie': fakecoockie}
+        {'coockie': user_access_token}
     )
 
 
 async def get_cookie(
-    fakecoockie=Cookie()
+    users_access_token: str | None = Cookie(default=None)
 ):
-    return fakecoockie
+    return users_access_token
 
 
-@app.get("/chat", response_class=HTMLResponse)
-async def get(request: Request, cookie=Depends(get_cookie)):
-    return templates.TemplateResponse(
+@app.get("/chat",)
+# async def get():
+#     return HTMLResponse(html)
+async def get(request: Request, users_access_token=Depends(get_cookie)):
+    # users_access_token = request.cookies.get('users_access_token')
+    print(users_access_token)
+    response = templates.TemplateResponse(
         request,
         'chat.html',
-        {'token': cookie}
+        {'token': users_access_token}
     )
+    response.set_cookie(key='users_access_token', value=users_access_token)
+    return response
+    # return {'token': users_access_token}
 
 
 async def get_cookie_or_token(
     websocket: WebSocket,
-    fakecoockie: Annotated[str | None, Cookie()] = None,
+    users_access_token: Annotated[str | None, Cookie()] = None,
     token: Annotated[str | None, Query()] = None,
 ):
-    if fakecoockie is None and token is None:
+    if users_access_token is None and token is None:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-    return fakecoockie or token
+    return users_access_token or token
 
 
 @app.websocket("/items/{item_id}/ws")
@@ -144,18 +193,17 @@ async def websocket_endpoint(
     websocket: WebSocket,
     item_id: str,
     q: int | None = None,
-    cookie_or_token: Annotated[str, Depends(get_cookie_or_token)],
-    # request: Request,
-    # cookie=Depends(get_cookie)
+    users_access_token: Annotated[str, Depends(get_cookie_or_token)],
+    cookie=Depends(get_cookie)
 ):
-    await manager.connect(cookie_or_token, websocket)
+    await manager.connect(users_access_token, websocket)
     print(manager.active_connections)
-    print(websocket._cookies)
+    print(cookie)
     try:
         while True:
             data = await websocket.receive_text()
             await manager.send_personal_message(
-                f"Session cookie or query token value is: {cookie_or_token}", websocket
+                f"Session cookie or query token value is: {users_access_token}", websocket
             )
             if q is not None:
                 await websocket.send_text(f"Query parameter q is: {q}")

@@ -8,6 +8,8 @@ from app.core.config import get_auth_data
 from app.crud.users import user_crud
 from app.models import User
 
+from fastapi import Response
+
 
 def create_access_token(data: dict) -> str:
     """Возвращает токен."""
@@ -19,6 +21,11 @@ def create_access_token(data: dict) -> str:
         to_encode, auth_data['secret_key'], algorithm=auth_data['algorithm']
     )
     return encode_jwt
+
+
+def create_coockie(response: Response, member: str):
+    response.set_cookie(key='user_access_token', value=member)
+    return {'result': 'ok'}
 
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
