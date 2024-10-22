@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.dependencies import get_current_user
 from app.api.endpoints import router_users
 
 app = FastAPI()
@@ -161,16 +162,17 @@ async def get_cookie(
     return users_access_token
 
 
-@app.get("/chat",)
+@app.get("/chat", dependencies=[Depends(get_current_user)])
 # async def get():
 #     return HTMLResponse(html)
-async def get(request: Request, users_access_token=Depends(get_cookie)):
+async def get(request: Request, users_access_token=Depends(get_cookie),
+              current_user=Depends(get_current_user)):
     # users_access_token = request.cookies.get('users_access_token')
     print(users_access_token)
     response = templates.TemplateResponse(
         request,
         'chat.html',
-        {'token': users_access_token}
+        {'token': current_user.id}
     )
     response.set_cookie(key='users_access_token', value=users_access_token)
     return response
