@@ -18,8 +18,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.dependencies import get_current_user
 from app.api.endpoints import router_users
+from app.crud.messages import message_crud
+from app.core.db import get_async_session
 
 app = FastAPI()
 
@@ -36,57 +40,6 @@ app.include_router(router_users)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
-
-html = """
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Chat</title>
-    </head>
-    <body>
-        <h1>WebSocket Chat</h1>
-
-        <hr>
-
-        <hr>
-        <form action="" onsubmit="sendMessage(event)">
-            <label>Item ID: <input type="text" id="itemId" autocomplete="off" value="foo"/></label>
-            <label>Token: <input type="text" id="token" autocomplete="off" value""/></label>
-            <button onclick="connect(event)">Connect</button>
-            <hr>
-            <label>Message: <input type="text" id="messageText" autocomplete="off"/></label>
-            <button>Send</button>
-        </form>
-        <ul id='messages'>
-        </ul>
-        <script>
-        var ws = null;
-            function connect(event) {
-                var itemId = document.getElementById("itemId")
-                var token = document.getElementById("token")
-                ws = new WebSocket("ws://localhost:8000/items/" + itemId.value + "/ws?token=" + token.value);
-                ws.onopen = () => console.log('Websocket connected')
-                ws.onmessage = function(event) {
-                    var messages = document.getElementById('messages')
-                    var message = document.createElement('li')
-                    var content = document.createTextNode(event.data)
-                    message.appendChild(content)
-                    messages.appendChild(message)
-                };
-                ws.onclose = () => console.log('Websocket disconnected')
-                event.preventDefault()
-            }
-            function sendMessage(event) {
-                var input = document.getElementById("messageText")
-                ws.send(input.value)
-                input.value = ''
-                event.preventDefault()
-            }
-        </script>
-    </body>
-</html>
-
-"""
 
 
 class ConnectionManager:
@@ -202,6 +155,7 @@ async def websocket_endpoint(
     item_id: str,
     q: int | None = None,
     users_access_token: Annotated[str, Depends(get_cookie_or_token)],
+    session: Annotated[AsyncSession, Depends(get_async_session)]
 ):
     await manager.connect(users_access_token, websocket)
     print(manager.active_connections)
@@ -209,18 +163,19 @@ async def websocket_endpoint(
         while True:
             data = await websocket.receive_text()
             to_recipient, message = data.split(maxsplit=1)
+            await message_crud.add(
+                session=session,
+                sender_id=int(users_access_token),
+                recipient_id=int(to_recipient),
+                content=message
+            )
             await manager.send_personal_message(
                 f"Сообщение пользователю {to_recipient}: {message}", websocket
             )
-            if q is not None:
-                await websocket.send_text(f"Query parameter q is: {q}")
-            if to_recipient == 'all':
-                await manager.broadcast(f"Сообщение для всех: {message}")
-            else:
-                await manager.send_message_to_user(
-                    f"Сообщение от пользователя {users_access_token}: {message}",
-                    to_recipient
-                )
+            await manager.send_message_to_user(
+                f"Сообщение от пользователя {users_access_token}: {message}",
+                to_recipient
+            )
     except WebSocketDisconnect:
         manager.disconnect(users_access_token, websocket)
         await manager.broadcast(f"Client #{users_access_token} left the chat")
