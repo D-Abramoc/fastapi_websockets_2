@@ -105,7 +105,13 @@ class ConnectionManager:
 
     async def broadcast(self, message: str):
         for user, connection in self.active_connections.items():
+            print(type(connection))
             await connection.send_text(message)
+
+    async def send_message_to_user(self, message: str, user_id: str):
+        for user, connection in self.active_connections.items():
+            if user == user_id:
+                await connection.send_text(message)
 
 
 manager = ConnectionManager()
@@ -196,20 +202,25 @@ async def websocket_endpoint(
     item_id: str,
     q: int | None = None,
     users_access_token: Annotated[str, Depends(get_cookie_or_token)],
-    cookie=Depends(get_cookie)
 ):
     await manager.connect(users_access_token, websocket)
     print(manager.active_connections)
-    print(cookie)
     try:
         while True:
             data = await websocket.receive_text()
+            to_recipient, message = data.split(maxsplit=1)
             await manager.send_personal_message(
-                f"Session cookie or query token value is: {users_access_token}", websocket
+                f"Сообщение пользователю {to_recipient}: {message}", websocket
             )
             if q is not None:
                 await websocket.send_text(f"Query parameter q is: {q}")
-            await manager.broadcast(f"Message text was: {data}, for item ID: {item_id}")
+            if to_recipient == 'all':
+                await manager.broadcast(f"Сообщение для всех: {message}")
+            else:
+                await manager.send_message_to_user(
+                    f"Сообщение от пользователя {users_access_token}: {message}",
+                    to_recipient
+                )
     except WebSocketDisconnect:
-        manager.disconnect(item_id, websocket)
-        await manager.broadcast(f"Client #{item_id} left the chat")
+        manager.disconnect(users_access_token, websocket)
+        await manager.broadcast(f"Client #{users_access_token} left the chat")
