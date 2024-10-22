@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user
-from app.api.endpoints import router_users
+from app.api.endpoints import router_users, router_messages
 from app.crud.messages import message_crud
 from app.core.db import get_async_session
 
@@ -36,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(router_users)
+app.include_router(router_messages)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

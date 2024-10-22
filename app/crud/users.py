@@ -6,4 +6,4 @@ class CRUDUser(CRUDBase):
     pass
 
 
-user_crud = CRUDBase(User)
+user_crud = CRUDUser(User)
