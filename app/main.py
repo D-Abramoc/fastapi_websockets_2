@@ -23,7 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user
 from app.api.endpoints import router_users, router_messages
 from app.crud.messages import message_crud
-from app.core.db import get_async_session
+from app.core.db import get_async_session, AsyncSessionLocal
+from app.crud.users import user_crud
+from app.exceptions import NoUserIdException
 
 from bot.main import bot
 
@@ -64,9 +66,14 @@ class ConnectionManager:
             print(type(connection))
             await connection.send_text(message)
 
-    async def send_message_to_user(self, message: str, user_id: str):
+    async def send_message_to_user(self, message: str, user_id: str,):
         if user_id not in self.active_connections:
-            await bot.send_message(779995922, 'Вам вам пришло сообщение!')
+            async with AsyncSessionLocal() as session:
+                user = await user_crud.find_one_or_none(session, id=int(user_id))
+            if user is None:
+                pass
+            else:
+                await bot.send_message(779995922, 'Вам вам пришло сообщение!')
         for user, connection in self.active_connections.items():
             if user == user_id:
                 await connection.send_text(message)
@@ -167,20 +174,36 @@ async def websocket_endpoint(
     try:
         while True:
             data = await websocket.receive_text()
-            to_recipient, message = data.split(maxsplit=1)
-            await message_crud.add(
-                session=session,
-                sender_id=int(users_access_token),
-                recipient_id=int(to_recipient),
-                content=message
-            )
-            await manager.send_personal_message(
-                f"Сообщение пользователю {to_recipient}: {message}", websocket
-            )
-            await manager.send_message_to_user(
-                f"Сообщение от пользователя {users_access_token}: {message}",
-                to_recipient
-            )
+            try:
+                to_recipient, message = data.split(maxsplit=1)
+            except ValueError:
+                to_recipient = data.strip()
+                message = 'Ничего не сказал'
+            try:
+                # if not await user_crud.find_one_or_none(session, id=int(to_recipient)):
+                #     raise NoUserIdException
+                await message_crud.add(
+                    session=session,
+                    sender_id=int(users_access_token),
+                    recipient_id=int(to_recipient),
+                    content=message
+                )
+                await manager.send_personal_message(
+                    f"Сообщение пользователю {to_recipient}: {message}", websocket
+                )
+                await manager.send_message_to_user(
+                    f"Сообщение от пользователя {users_access_token}: {message}",
+                    to_recipient
+                )
+            except Exception:
+                pass
+            # await manager.send_personal_message(
+            #     f"Сообщение пользователю {to_recipient}: {message}", websocket
+            # )
+            # await manager.send_message_to_user(
+            #     f"Сообщение от пользователя {users_access_token}: {message}",
+            #     to_recipient
+            # )
     except WebSocketDisconnect:
         manager.disconnect(users_access_token, websocket)
         await manager.broadcast(f"Client #{users_access_token} left the chat")
