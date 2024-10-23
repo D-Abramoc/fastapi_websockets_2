@@ -7,11 +7,14 @@ from app.dependencies import get_current_user
 from app.core.db import get_async_session
 from app.crud.messages import message_crud
 
+from fastapi_cache.decorator import cache
+
 
 router = APIRouter(prefix='/chat', tags=['Chat'])
 
 
 @router.get('/messages/{user_id}', response_model=list[MessageRead])
+@cache(expire=120)
 async def get_messages(
     user_id: int,
     current_user: User = Depends(get_current_user),

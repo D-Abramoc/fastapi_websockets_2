@@ -29,6 +29,13 @@ from app.exceptions import NoUserIdException
 
 from bot.main import bot
 
+from app.worker import add
+from celery.result import AsyncResult
+
+import redis.asyncio as aioredis
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+
 app = FastAPI()
 
 app.add_middleware(
@@ -41,6 +48,13 @@ app.add_middleware(
 
 app.include_router(router_users)
 app.include_router(router_messages)
+
+
+@app.on_event("startup")
+async def startup_event():
+    redis = aioredis.from_url("redis://localhost", encoding='utf-8', decode_responses=True)
+    FastAPICache.init(RedisBackend(redis=redis), prefix='fastapi-cache')
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -80,6 +94,18 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+@app.get('/task/{task_id}')
+async def get_task_status(task_id: str):
+    task_result = AsyncResult(task_id)
+    return {'task_id': task_id, 'status': task_result.status}
+
+
+@app.post('/add/')
+async def create_task(x: int, y: int):
+    task = add.delay(x, y)
+    return {'task_id': task.id}
 
 
 @app.get('/')
