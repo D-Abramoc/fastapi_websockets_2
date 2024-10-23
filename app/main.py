@@ -25,6 +25,8 @@ from app.api.endpoints import router_users, router_messages
 from app.crud.messages import message_crud
 from app.core.db import get_async_session
 
+from bot.main import bot
+
 app = FastAPI()
 
 app.add_middleware(
@@ -63,6 +65,8 @@ class ConnectionManager:
             await connection.send_text(message)
 
     async def send_message_to_user(self, message: str, user_id: str):
+        if user_id not in self.active_connections:
+            await bot.send_message(779995922, 'Вам вам пришло сообщение!')
         for user, connection in self.active_connections.items():
             if user == user_id:
                 await connection.send_text(message)
