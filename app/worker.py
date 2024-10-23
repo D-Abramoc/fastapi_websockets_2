@@ -1,6 +1,13 @@
+import asyncio
 import time
 
 from celery import Celery
+
+from bot.main import bot
+
+# import tracemalloc
+
+# tracemalloc.start()
 
 
 celery_app = Celery(
@@ -11,9 +18,15 @@ celery_app = Celery(
 
 
 @celery_app.task
-def add(x, y):
-    time.sleep(10)
-    return x + y
+def send_notification(client_id: int, message: str):
+    try:
+        asyncio.get_event_loop().run_until_complete(
+            bot.send_message(client_id, message)
+        )
+    except Exception:
+        pass
+    # await bot.send_message(client_id, message)
+    return 'ok'
 
 
 # import os
