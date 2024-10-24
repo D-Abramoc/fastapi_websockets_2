@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from fastapi.templating import Jinja2Templates
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +21,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='infra/.env', extra="ignore")
 
 
+class BotSettings(BaseSettings):
+    bot_token: SecretStr
+    model_config = SettingsConfigDict(env_file='infra/.env', extra="ignore")
+
+
 settings = Settings()
+bot_settings = BotSettings()
 
 
 def get_auth_data():
@@ -27,3 +35,6 @@ def get_auth_data():
         'secret_key': settings.secret,
         'algorithm': settings.algorithm
     }
+
+
+templates = Jinja2Templates(directory="templates")

@@ -3,13 +3,12 @@ import logging
 
 from aiogram import Bot, Dispatcher
 
-from .config_reader import config
-from .handlers import router as start_router
-
+from app.core.config import bot_settings
+from app.bot.handlers import router as start_router
 
 logger = logging.getLogger(__name__)
 
-bot = Bot(token=config.bot_token.get_secret_value())
+bot = Bot(token=bot_settings.bot_token.get_secret_value())
 
 
 async def main(bot):
@@ -21,7 +20,7 @@ async def main(bot):
     )
     logger.debug("-> Bot online")
 
-    bot = bot
+    bot: Bot = bot
     dp = Dispatcher()
     dp.include_routers(start_router,)
 

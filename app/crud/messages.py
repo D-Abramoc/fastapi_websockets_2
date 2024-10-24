@@ -1,4 +1,4 @@
-from sqlalchemy import select, or_, and_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.base import CRUDBase
@@ -13,6 +13,9 @@ class CRUDMessage(CRUDBase):
             user_id_2: int,
             session: AsyncSession
     ):
+        """
+        Возвращает все сообщения между указанными юзерами.
+        """
         stmt = select(self.model).filter(
             or_(
                 and_(

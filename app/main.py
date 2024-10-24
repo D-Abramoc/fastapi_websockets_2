@@ -1,47 +1,22 @@
 from typing import Annotated
 
-from fastapi import (
-    Cookie,
-    Depends,
-    FastAPI,
-    Query,
-    WebSocket,
-    WebSocketException,
-    status,
-    WebSocketDisconnect,
-    Response,
-    Form,
-    Request
-)
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.dependencies import get_current_user
-from app.api.endpoints import router_users, router_messages
-from app.crud.messages import message_crud
-from app.core.db import get_async_session, AsyncSessionLocal
-from app.crud.users import user_crud
-from app.exceptions import NoUserIdException
-
-from bot.main import bot
-
-from app.worker import send_notification
-from celery.result import AsyncResult
-
-# import redis.asyncio as aioredis
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.endpoints import router_messages, router_users
+from app.api.utils.messages import manager
+from app.core.db import get_async_session
+from app.crud.messages import message_crud
+from app.dependencies import get_cookie_or_token
+from app.exceptions import (NoJwtException, TokenExpiredException,
+                            TokenNoFoundException)
 from app.redis_app import redis as r
-
-# import tracemalloc
-
-# tracemalloc.start()
-
-
 
 app = FastAPI()
 
@@ -59,138 +34,40 @@ app.include_router(router_messages)
 
 @app.on_event("startup")
 async def startup_event():
-    # redis = aioredis.from_url("redis://localhost", encoding='utf-8', decode_responses=True)
     FastAPICache.init(RedisBackend(redis=r), prefix='fastapi-cache')
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-templates = Jinja2Templates(directory="templates")
-
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[int, WebSocket] = {}
-
-    async def connect(self, client_id, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections[client_id] = websocket
-
-    def disconnect(self, client_id, websocket: WebSocket):
-        self.active_connections.pop(client_id)
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
-        for user, connection in self.active_connections.items():
-            await connection.send_text(message)
-
-    async def send_message_to_user(self, message: str, user_id: str,):
-        if user_id not in self.active_connections:
-            async with AsyncSessionLocal() as session:
-                user = await user_crud.find_one_or_none(session, id=int(user_id))
-            if user is None:
-                pass
-            else:
-                # await bot.send_message(779995922, 'Вам вам пришло сообщение!')
-                send_notification.delay(779995922, 'You have a message')
-        for user, connection in self.active_connections.items():
-            if user == user_id:
-                await connection.send_text(message)
-
-
-manager = ConnectionManager()
-
-
-@app.get('/task/{task_id}')
-async def get_task_status(task_id: str):
-    task_result = AsyncResult(task_id)
-    return {'task_id': task_id, 'status': task_result.status}
-
-
-@app.post('/add/')
-async def create_task(x: int, y: int):
-    task = send_notification.delay(x, y)
-    return {'task_id': task.id}
-
 
 @app.get('/')
 async def redirect_to_auth():
-    """Редирект на страницу /auth."""
-    return RedirectResponse(url='/auth_or_register')
+    """Редирект на страницу авторизации и регистрации."""
+    return RedirectResponse(url='/auth/auth_or_register')
 
 
-@app.get('/auth_or_register', response_class=HTMLResponse)
-async def auth_or_register(request: Request):
-    return templates.TemplateResponse(
-        request, 'auth_or_register.html'
-    )
-
-
-@app.get('/register', response_class=HTMLResponse)
-async def register_page(request: Request):
-    return templates.TemplateResponse(
-        request, 'register.html'
-    )
-
-
-
-@app.get('/auth', response_class=HTMLResponse)
-async def auth_page(request: Request):
-    return templates.TemplateResponse(
-        request, 'auth.html'
-    )
-
-
-
-
-@app.post('/coockie')
-async def create_coockie(response: Response, member=Form()):
-    response.set_cookie(key='user_access_token', value=member)
-    return {'result': 'ok'}
-
-
-@app.get('/checkcookie', response_class=HTMLResponse)
-async def check(request: Request, user_access_token: str | None = Cookie(default=None)):
-    return templates.TemplateResponse(
-        request,
-        'checkcookie.html',
-        {'coockie': user_access_token}
-    )
-
-
-async def get_cookie(
-    users_access_token: str | None = Cookie(default=None)
+@app.exception_handler(TokenExpiredException)
+async def token_expired_exception_handler(
+    request: Request, exc: HTTPException
 ):
-    return users_access_token
+    """Редирект на страницу авторизации, если истек токен."""
+    return RedirectResponse(url='/auth/auth')
 
 
-@app.get("/chat", dependencies=[Depends(get_current_user)])
-# async def get():
-#     return HTMLResponse(html)
-async def get(request: Request, users_access_token=Depends(get_cookie),
-              current_user=Depends(get_current_user)):
-    # users_access_token = request.cookies.get('users_access_token')
-    print(users_access_token)
-    response = templates.TemplateResponse(
-        request,
-        'chat.html',
-        {'token': current_user.id}
-    )
-    response.set_cookie(key='users_access_token', value=users_access_token)
-    return response
-    # return {'token': users_access_token}
-
-
-async def get_cookie_or_token(
-    websocket: WebSocket,
-    users_access_token: Annotated[str | None, Cookie()] = None,
-    token: Annotated[str | None, Query()] = None,
+@app.exception_handler(TokenNoFoundException)
+async def token_no_found_exception_handler(
+    request: Request, exc: HTTPException
 ):
-    if users_access_token is None and token is None:
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-    return users_access_token or token
+    """Редирект на страницу авторизации, если токен не найден."""
+    return RedirectResponse(url='/auth/auth')
+
+
+@app.exception_handler(NoJwtException)
+async def not_validated_token(
+    request: Request, exc: HTTPException
+):
+    """Редирект на страницу авторизации, если токен не валидный."""
+    return RedirectResponse(url='/auth/auth')
 
 
 @app.websocket("/items/{item_id}/ws")
@@ -199,11 +76,10 @@ async def websocket_endpoint(
     websocket: WebSocket,
     item_id: str,
     q: int | None = None,
-    users_access_token: Annotated[str, Depends(get_cookie_or_token)],
+    nik_ws: Annotated[str, Depends(get_cookie_or_token)],
     session: Annotated[AsyncSession, Depends(get_async_session)]
 ):
-    await manager.connect(users_access_token, websocket)
-    print(manager.active_connections)
+    await manager.connect(nik_ws, websocket)
     try:
         while True:
             data = await websocket.receive_text()
@@ -213,30 +89,22 @@ async def websocket_endpoint(
                 to_recipient = data.strip()
                 message = 'Ничего не сказал'
             try:
-                # if not await user_crud.find_one_or_none(session, id=int(to_recipient)):
-                #     raise NoUserIdException
                 await message_crud.add(
                     session=session,
-                    sender_id=int(users_access_token),
+                    sender_id=int(nik_ws),
                     recipient_id=int(to_recipient),
                     content=message
                 )
                 await manager.send_personal_message(
-                    f"Сообщение пользователю {to_recipient}: {message}", websocket
+                    f"Сообщение пользователю {to_recipient}: {message}",
+                    websocket
                 )
                 await manager.send_message_to_user(
-                    f"Сообщение от пользователя {users_access_token}: {message}",
+                    f"Сообщение от пользователя {nik_ws}: {message}",
                     to_recipient
                 )
             except Exception:
                 pass
-            # await manager.send_personal_message(
-            #     f"Сообщение пользователю {to_recipient}: {message}", websocket
-            # )
-            # await manager.send_message_to_user(
-            #     f"Сообщение от пользователя {users_access_token}: {message}",
-            #     to_recipient
-            # )
     except WebSocketDisconnect:
-        manager.disconnect(users_access_token, websocket)
-        await manager.broadcast(f"Client #{users_access_token} left the chat")
+        manager.disconnect(nik_ws, websocket)
+        await manager.broadcast(f"Client #{nik_ws} left the chat")

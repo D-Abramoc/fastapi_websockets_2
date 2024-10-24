@@ -1,26 +1,30 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Request, Form, Depends, Response
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.utils.users import (authenticate_user, create_access_token,
+                                 get_password_hash)
 from app.core.db import get_async_session
-from app.schemas.users import UserRegister, UserAuth
 from app.crud.users import user_crud
-from app.exceptions import (
-    UserAlreadyExistsException, PasswordMismatchException,
-    IncorrectEmailOrPasswordException
-)
-from app.api.utils.users import (
-    get_password_hash, authenticate_user, create_access_token
-)
-from app.api.utils.users import create_coockie  
-
+from app.exceptions import (IncorrectEmailOrPasswordException,
+                            PasswordMismatchException,
+                            UserAlreadyExistsException)
+from app.schemas.users import UserAuth, UserRegister
 
 router = APIRouter(prefix='/auth', tags=['Auth'])
 
 templates = Jinja2Templates(directory='templates')
+
+
+@router.get('/register', response_class=HTMLResponse)
+async def register_page(request: Request):
+    """Страница регистрации."""
+    return templates.TemplateResponse(
+        request, 'register.html'
+    )
 
 
 @router.post('/register', response_class=HTMLResponse)
@@ -46,6 +50,14 @@ async def register(
     )
 
 
+@router.get('/auth', response_class=HTMLResponse)
+async def auth_page(request: Request):
+    """Страница авторизации."""
+    return templates.TemplateResponse(
+        request, 'auth.html'
+    )
+
+
 @router.post('/auth',)
 async def auth_cookie(
     request: Request,
@@ -67,9 +79,15 @@ async def auth_cookie(
         'auth_success.html',
         {'token': access_token}
     )
-    # create_coockie(response=response, member=access_token)
     response.set_cookie(
         key='users_access_token', value=access_token, httponly=True,
     )
     return response
-    # return {'token': access_token}
+
+
+@router.get('/auth_or_register', response_class=HTMLResponse)
+async def auth_or_register(request: Request):
+    """Страница авторизация/регистрация."""
+    return templates.TemplateResponse(
+        request, 'auth_or_register.html'
+    )

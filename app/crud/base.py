@@ -1,6 +1,6 @@
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class CRUDBase:
@@ -20,6 +20,9 @@ class CRUDBase:
         return result.scalar_one_or_none()
 
     async def find_one_or_none(self, session: AsyncSession, **filter_by):
+        """
+        Возвращает экземпляр модели по переданным параметрам или None.
+        """
         stmt = select(self.model).filter_by(**filter_by)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -29,6 +32,9 @@ class CRUDBase:
             session: AsyncSession,
             **filter_by
     ):
+        """
+        Возвращает все экземпляры модели соответствующие параметрам.
+        """
         stmt = select(self.model).filter_by(**filter_by)
         result = await session.execute(stmt)
         return result.scalars().all()
@@ -38,6 +44,7 @@ class CRUDBase:
             session: AsyncSession,
             **values
     ):
+        """Создаёт экземпляр модели и возвращает её."""
         new_instance = self.model(**values)
         session.add(new_instance)
         try:

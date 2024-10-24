@@ -1,31 +1,25 @@
+from datetime import datetime, timedelta, timezone
+
+from jose import jwt
 from passlib.context import CryptContext
 from pydantic import EmailStr
-from jose import jwt
-from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_auth_data
 from app.crud.users import user_crud
 from app.models import User
 
-from fastapi import Response
-
 
 def create_access_token(data: dict) -> str:
     """Возвращает токен."""
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=366)
+    expire = datetime.now(timezone.utc) + timedelta(days=360)
     to_encode.update({'exp': expire})
     auth_data = get_auth_data()
     encode_jwt = jwt.encode(
         to_encode, auth_data['secret_key'], algorithm=auth_data['algorithm']
     )
     return encode_jwt
-
-
-def create_coockie(response: Response, member: str):
-    response.set_cookie(key='user_access_token', value=member)
-    return {'result': 'ok'}
 
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
@@ -37,6 +31,7 @@ def get_password_hash(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Верификация пароля."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
